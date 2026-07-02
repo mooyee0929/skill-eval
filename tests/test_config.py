@@ -74,3 +74,25 @@ def test_baseline_mode_requires_a_bare_arm(tmp_path: Path) -> None:
     body = VALID.format().replace("- label: baseline", "- label: baseline\n    skill: skill.md")
     with pytest.raises(ValueError, match="requires one arm without"):
         load_eval_config(write_config(tmp_path, body))
+
+
+EXECUTOR_BLOCK = """\
+executor:
+  run_cmd: ["gemini", "-m", "{model}", "-p", "{prompt}"]
+  judge_cmd: ["gemini", "-m", "{model}", "-p", "{prompt}"]
+  output_format: text
+"""
+
+
+def test_executor_config_parsed(tmp_path: Path) -> None:
+    (tmp_path / "skill.md").write_text("# s", encoding="utf-8")
+    cfg = load_eval_config(write_config(tmp_path, VALID.format() + EXECUTOR_BLOCK))
+    assert cfg.executor.run_cmd is not None
+    assert cfg.executor.output_format == "text"
+
+
+def test_executor_requires_prompt_placeholder(tmp_path: Path) -> None:
+    (tmp_path / "skill.md").write_text("# s", encoding="utf-8")
+    body = VALID.format() + 'executor:\n  run_cmd: ["gemini", "-p", "hello"]\n'
+    with pytest.raises(ValueError, match="prompt.*placeholder"):
+        load_eval_config(write_config(tmp_path, body))

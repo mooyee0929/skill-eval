@@ -101,7 +101,7 @@ def test_score_results_parallel_judge(tmp_path: Path, monkeypatch: pytest.Monkey
 
     calls: list[str] = []
 
-    def fake_judge(metric, task_prompt, response, *, model, votes):  # type: ignore[no-untyped-def]
+    def fake_judge(metric, task_prompt, response, *, model, votes, **kwargs):  # type: ignore[no-untyped-def]
         calls.append(metric.name)
         return 0.75
 
