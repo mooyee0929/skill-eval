@@ -1,0 +1,56 @@
+# Example evaluation config. Written by the skill-eval Claude Code skill
+# during the interactive intake phases; can also be edited by hand.
+
+mode: skill-vs-baseline        # or: skill-vs-skill
+purpose: >
+  Summarize a Python module into a short doc paragraph with correct facts.
+requirements:
+  - Output must be under 200 words
+  - Must mention every public function
+  - No fabricated behavior
+category: summarization        # see `skill-eval categories`
+
+arms:
+  - label: baseline (no skill)
+    # no `skill:` key => plain prompt, this is the baseline arm
+  - label: doc-summarizer skill
+    skill: ../skills/doc-summarizer/SKILL.md   # relative to this file
+
+runs_per_case: 3
+model: claude-sonnet-4-6
+judge_model: claude-haiku-4-5-20251001
+judge_votes: 3
+max_turns: 8
+timeout_s: 600
+# permission_mode: bypassPermissions   # only if cases need file/tool access
+results_dir: results
+
+cases:
+  - id: happy-simple-module
+    lens: happy-path
+    prompt: |
+      Summarize this module:
+
+      def add(a: int, b: int) -> int: return a + b
+      def sub(a: int, b: int) -> int: return a - b
+    expected:
+      type: text
+      value: "Provides basic integer arithmetic: add returns the sum of two integers, sub returns their difference."
+
+  - id: edge-empty-module
+    lens: edge
+    prompt: |
+      Summarize this module:
+
+      # (the file is empty)
+    expected:
+      type: text
+      value: "The module is empty and defines no functions or classes."
+
+  # A case with a fixture directory and a verification command
+  # (used by update_success_rate when the category includes it):
+  # - id: update-readme
+  #   lens: workflow
+  #   prompt: "Update README.md so the install section matches pyproject.toml"
+  #   fixture_dir: fixtures/update-readme
+  #   check_cmd: "grep -q 'pip install mypkg==2.0' README.md"
