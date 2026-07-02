@@ -21,19 +21,131 @@ eval.yaml ──▶ skill-eval run ──▶ results/{case}/{arm}/run-N.json
               skill-eval report ──▶ results/report.md
 ```
 
-## Usage
+## Full pipeline walkthrough
+
+The fastest path is a chat front-end that walks these steps with you —
+`/skill-eval` in Claude Code, or `/skill-eval` in VS Code Copilot Chat
+(agent mode) with this repo's prompt file. Everything below is the same
+pipeline driven by hand.
+
+### Step 0 — Install (pick one)
 
 ```bash
-uv sync                                    # once
-uv run skill-eval categories               # taxonomy: categories × metrics
-uv run skill-eval validate -c eval.yaml
-uv run skill-eval run      -c eval.yaml    # resumable
-uv run skill-eval score    -c eval.yaml
-uv run skill-eval report   -c eval.yaml
+# a) from this repo
+uv sync && uv run skill-eval --help
+
+# b) prebuilt wheel
+uv tool install https://github.com/mooyee0929/skill-eval/releases/latest/download/skill_eval-0.5.0-py3-none-any.whl
+
+# c) no uv/pip: single-file zipapp, only needs Python 3.8+
+curl -LO https://github.com/mooyee0929/skill-eval/releases/latest/download/skill-eval.pyz
+alias skill-eval="python3 $PWD/skill-eval.pyz"
 ```
 
+Runs and judges need a model backend: the `claude` CLI on PATH (default),
+any other agent CLI, or a raw HTTP API — see the executor sections below.
+
+### Step 1 — Pick the category
+
+```bash
+skill-eval categories        # lists every category and its metrics/weights
+```
+
+Choose the category that matches what the skill does; it decides which
+metrics score the evaluation (e.g. `diagram_generation` → render success,
+edge F1, readability).
+
+### Step 2 — Write eval.yaml
+
+```bash
+mkdir my-eval && cd my-eval
+```
+
+Minimal config (full schema with every option: `examples/eval.example.yaml`):
+
+```yaml
+mode: skill-vs-baseline          # or: skill-vs-skill
+purpose: >
+  One paragraph: what the skill is supposed to do well.
+requirements:
+  - Success criteria and forbidden behaviors, one per line
+category: diagram_generation     # from step 1
+
+arms:
+  - label: baseline              # no `skill:` key = bare model
+  - label: my skill
+    skill: ../my-skill/SKILL.md  # skill-vs-skill: give both arms a skill
+
+runs_per_case: 3
+model: claude-sonnet-4-6
+judge_model: claude-haiku-4-5-20251001
+
+cases: []                        # filled in step 3
+```
+
+### Step 3 — Generate test cases, approve, merge (repeat until satisfied)
+
+```bash
+skill-eval gen-cases -c eval.yaml --per-lens 2
+```
+
+One independent generator per lens (happy-path / edge / adversarial /
+format-variance) runs in parallel and writes deduped candidates to
+`candidates.yaml`. Open it, review each candidate (edit freely), then merge
+only the ones you accept:
+
+```bash
+skill-eval add-case -c eval.yaml --from candidates.yaml --ids happy-x,edge-y
+# or --all if every candidate passed review
+```
+
+Re-run `gen-cases` for another round — merged cases' capability points are
+automatically excluded from the next generation. Aim for 10+ cases with a
+deterministic `expected` block; fewer works but the report will flag the
+result as directional.
+
+### Step 4 — Sanity-check the config
+
+```bash
+skill-eval validate -c eval.yaml
+```
+
+Flags unknown categories, missing skill files, duplicate case ids, and
+tells you which cases have no deterministic ground truth (judge-only).
+
+### Step 5 — Execute
+
+```bash
+skill-eval run -c eval.yaml
+```
+
+Every (case × arm × run) executes in a fresh headless session in an
+isolated temp workspace: `cases × 2 arms × runs_per_case` sessions total,
+so expect minutes, not seconds. Interrupted? Just re-run — completed
+combinations are cached in `results/` and skipped.
+
+### Step 6 — Score
+
+```bash
+skill-eval score -c eval.yaml
+```
+
+Deterministic metrics are computed in-process; judge metrics fan out to a
+parallel pool of blind LLM votes. Output: `results/scores.json`.
+
+### Step 7 — Report
+
+```bash
+skill-eval report -c eval.yaml     # prints and saves results/report.md
+```
+
+Read it in this order: composite score per arm → uplift (arm B − arm A) →
+per-metric deltas (what drove the difference) → **Regressions** (cases where
+arm B lost — read those runs' JSON in `results/<case>/<arm>/` first, they
+are where the real insight lives).
+
 Config schema: see `examples/eval.example.yaml`. Category → metric mapping:
-`taxonomy.yaml`.
+`src/skill_eval/taxonomy.yaml`.
 
 ## Scoring model
 
