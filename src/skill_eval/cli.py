@@ -10,8 +10,8 @@
 from __future__ import annotations
 
 import argparse
+import pkgutil
 import sys
-from importlib import resources
 from pathlib import Path
 
 from . import aggregate as agg
@@ -24,8 +24,10 @@ def _resolve_taxonomy(arg: str | None) -> Taxonomy:
     (works from a normal install and from a zipapp)."""
     if arg:
         return load_taxonomy(Path(arg))
-    text = resources.files("skill_eval").joinpath("taxonomy.yaml").read_text(encoding="utf-8")
-    return load_taxonomy_text(text)
+    data = pkgutil.get_data("skill_eval", "taxonomy.yaml")
+    if data is None:
+        raise FileNotFoundError("bundled taxonomy.yaml not found in package")
+    return load_taxonomy_text(data.decode("utf-8"))
 
 
 def _load(args: argparse.Namespace) -> tuple[EvalConfig, Taxonomy]:
