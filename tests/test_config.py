@@ -15,7 +15,8 @@ def test_taxonomy_loads_and_is_consistent() -> None:
             metric = taxonomy.metrics[metric_name]
             if metric.kind == "judge":
                 assert metric.rubric, f"judge metric {metric_name} needs a rubric"
-            if metric.kind == "deterministic":
+            if metric.kind == "deterministic" and metric_name != "render_success_rate":
+                # render_success_rate is output-only and needs no expected block
                 assert metric.expected_type, f"{metric_name} needs expected_type"
 
 

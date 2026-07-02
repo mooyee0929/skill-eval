@@ -83,3 +83,25 @@ def test_score_dispatch() -> None:
     assert d.score("exact_match", "hello", exp) == 1.0
     assert d.score("nonexistent_metric", "x", exp) is None
     assert d.score("field_f1", "x", None) is None
+
+
+def test_render_success_applies_without_expected() -> None:
+    assert d.score("render_success_rate", "```mermaid\ngraph TD\n A --> B\n```", None) == 1.0
+    edges_exp = Expected(type="edges", value=["A -> B"])
+    assert d.score("render_success_rate", "no diagram", edges_exp) == 0.0
+
+
+def test_edge_extraction_with_node_labels() -> None:
+    exp = Expected(type="edges", value=["ApiGateway -> AuthService"])
+    out = '```mermaid\ngraph TD\n  ApiGateway["api/gateway"] -->|token| AuthService["auth.service(v2)"]\n```'
+    assert d.edge_f1(out, exp) == 1.0
+    stadium = Expected(type="edges", value=["WebApp -> Stripe"])
+    out2 = "```mermaid\ngraph TD\n  WebApp([Web App]) --> Stripe([Stripe API])\n```"
+    assert d.edge_f1(out2, stadium) == 1.0
+
+
+def test_render_success_edgeless_diagram() -> None:
+    out = "```mermaid\ngraph TD\n  LogRotator\n  CsvExporter\n```"
+    assert d.render_success_rate(out) == 1.0
+    assert d.render_success_rate("```mermaid\ngraph TD\n```") == 0.0
+    assert d.render_success_rate("```mermaid\nnot a header\nA\n```") == 0.0

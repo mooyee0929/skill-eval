@@ -93,3 +93,27 @@ def test_render_markdown_contains_key_sections(tmp_path: Path) -> None:
     assert "## Per-metric" in md
     assert "baseline" in md and "skill" in md
     assert "treat the uplift as directional" in md  # <10 cases warning
+
+
+def test_score_results_parallel_judge(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    import skill_eval.aggregate as agg
+    from skill_eval.runner import RunResult
+
+    calls: list[str] = []
+
+    def fake_judge(metric, task_prompt, response, *, model, votes):  # type: ignore[no-untyped-def]
+        calls.append(metric.name)
+        return 0.75
+
+    monkeypatch.setattr(agg, "judge_score", fake_judge)
+    cfg = make_cfg(tmp_path, category="diagram_generation")
+    results = [
+        RunResult(case_id="c1", arm="a", run_index=0, ok=True, output="```mermaid\ngraph TD\n A --> B\n```", latency_s=1.0),
+        RunResult(case_id="c1", arm="b", run_index=0, ok=False, output="", latency_s=1.0, error="boom"),
+    ]
+    table = agg.score_results(cfg, TAXONOMY, results, verbose=False)
+    # ok run: readability judged in the pool; failed run: readability scored 0 without a judge call
+    assert calls == ["readability"]
+    assert table.values("a", "readability") == [0.75]
+    assert table.values("b", "readability") == [0.0]
+    assert table.values("a", "render_success_rate") == [1.0]

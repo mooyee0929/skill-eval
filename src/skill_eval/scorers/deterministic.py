@@ -14,10 +14,14 @@ from ..config import Expected
 _JSON_BLOCK = re.compile(r"```(?:json)?\s*\n(.*?)```", re.DOTALL)
 _MERMAID_BLOCK = re.compile(r"```mermaid\s*\n(.*?)```", re.DOTALL)
 _MD_LINK = re.compile(r"\[[^\]]*\]\(([^)#\s]+)[^)]*\)")
+# A node reference is an ID optionally followed by a shape/label like
+# NodeId["label"], NodeId(text), NodeId([stadium]) or NodeId{diamond}.
+_NODE_SHAPE = r"(?:[\[({][^\n]*?[\])}]+)?"
 _MERMAID_EDGE = re.compile(
-    r"^\s*([A-Za-z0-9_\-\.]+)\s*[-.=]{2,}[>ox]?[-.=]*\s*(?:\|[^|]*\|\s*)?([A-Za-z0-9_\-\.]+)",
+    rf"^\s*([A-Za-z0-9_\-\.]+){_NODE_SHAPE}\s*[-.=]{{2,}}[>ox]?[-.=]*\s*(?:\|[^|]*\|\s*)?([A-Za-z0-9_\-\.]+)",
     re.MULTILINE,
 )
+_MERMAID_HEADER = re.compile(r"^\s*(graph|flowchart)\s+(TD|TB|LR|RL|BT)\b")
 
 
 def extract_json(output: str) -> Any | None:
@@ -149,13 +153,20 @@ def edge_f1(output: str, expected: Expected) -> float:
     return 2 * precision * recall / (precision + recall)
 
 
-def render_success_rate(output: str, expected: Expected) -> float:
-    """1.0 if the response contains a mermaid block whose nodes are all
-    connected by at least one parseable edge (a cheap syntactic render proxy)."""
+def render_success_rate(output: str, expected: Expected | None = None) -> float:
+    """Cheap syntactic render proxy: 1.0 if the response contains a mermaid
+    block with either at least one parseable edge, or a valid graph header
+    plus at least one node line (edge-less diagrams are renderable too)."""
     blocks = _MERMAID_BLOCK.findall(output)
     if not blocks:
         return 0.0
-    return 1.0 if _extract_edges(output) else 0.0
+    if _extract_edges(output):
+        return 1.0
+    for block in blocks:
+        lines = [line.strip() for line in block.splitlines() if line.strip()]
+        if lines and _MERMAID_HEADER.match(lines[0]) and len(lines) > 1:
+            return 1.0
+    return 0.0
 
 
 def broken_link_rate(output: str, expected: Expected) -> float | None:
@@ -194,6 +205,8 @@ SCORERS = {
 
 
 def score(metric_name: str, output: str, expected: Expected | None, *, check_cmd_ok: bool | None = None) -> float | None:
+    if metric_name == "render_success_rate":
+        return render_success_rate(output)
     if metric_name == "update_success_rate":
         if expected is None and check_cmd_ok is None:
             return None

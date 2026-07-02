@@ -5,6 +5,7 @@ from __future__ import annotations
 
 import json
 import statistics
+from concurrent.futures import ThreadPoolExecutor, as_completed
 from dataclasses import asdict, dataclass, field
 from pathlib import Path
 
@@ -47,10 +48,12 @@ def score_results(
     results: list[RunResult],
     *,
     verbose: bool = True,
+    judge_workers: int = 12,
 ) -> ScoreTable:
     category = taxonomy.category(cfg.category)
     cases = _case_by_id(cfg)
     table = ScoreTable()
+    judge_jobs: list[tuple[TestCase, RunResult, MetricDef]] = []
 
     for result in results:
         case = cases.get(result.case_id)
@@ -58,6 +61,9 @@ def score_results(
             continue
         for metric_name in category.metrics:
             metric = taxonomy.metrics[metric_name]
+            if metric.kind == "judge" and result.ok:
+                judge_jobs.append((case, result, metric))
+                continue
             value = _score_one(cfg, metric, case, result, verbose=verbose)
             if value is not None:
                 table.scores.append(
@@ -69,6 +75,43 @@ def score_results(
                         value=value,
                     )
                 )
+
+    if judge_jobs:
+        if verbose:
+            print(f"  {len(judge_jobs)} judge jobs × {cfg.judge_votes} votes ({judge_workers} parallel workers)")
+        done = 0
+        with ThreadPoolExecutor(max_workers=judge_workers) as pool:
+            futures = {
+                pool.submit(
+                    judge_score,
+                    metric,
+                    case.prompt,
+                    result.output,
+                    model=cfg.judge_model,
+                    votes=cfg.judge_votes,
+                ): (case, result, metric)
+                for case, result, metric in judge_jobs
+            }
+            for future in as_completed(futures):
+                case, result, metric = futures[future]
+                done += 1
+                try:
+                    value = future.result()
+                except JudgeError as exc:
+                    if verbose:
+                        print(f"  judge failed for {case.id}/{result.arm}/{metric.name}: {exc}")
+                    continue
+                table.scores.append(
+                    MetricScore(
+                        case_id=result.case_id,
+                        arm=result.arm,
+                        run_index=result.run_index,
+                        metric=metric.name,
+                        value=value,
+                    )
+                )
+                if verbose and done % 20 == 0:
+                    print(f"  judged {done}/{len(judge_jobs)}")
     return table
 
 
@@ -92,26 +135,20 @@ def _score_one(
         return 0.0
 
     if metric.kind == "deterministic":
-        if case.expected is not None and metric.expected_type is not None:
-            if case.expected.type != metric.expected_type and metric.name != "update_success_rate":
-                return None
+        # Metrics without an expected_type score every case from the output alone.
+        if (
+            metric.expected_type is not None
+            and case.expected is not None
+            and case.expected.type != metric.expected_type
+            and metric.name != "update_success_rate"
+        ):
+            return None
         return deterministic.score(
             metric.name, result.output, case.expected, check_cmd_ok=result.check_cmd_ok
         )
 
-    # judge metric
-    try:
-        return judge_score(
-            metric,
-            case.prompt,
-            result.output,
-            model=cfg.judge_model,
-            votes=cfg.judge_votes,
-        )
-    except JudgeError as exc:
-        if verbose:
-            print(f"  judge failed for {case.id}/{result.arm}/{metric.name}: {exc}")
-        return None
+    # judge metrics on successful runs are scored in parallel by score_results
+    return None
 
 
 def save_scores(path: Path, table: ScoreTable) -> None:
