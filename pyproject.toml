@@ -1,6 +1,6 @@
 [project]
 name = "skill-eval"
-version = "0.4.0"
+version = "0.5.0"
 description = "A/B evaluation pipeline for Claude Code skills: run test cases headlessly, score with deterministic metrics and blind LLM judges, aggregate an uplift report."
 requires-python = ">=3.8"
 dependencies = [

@@ -89,9 +89,7 @@ def score_results(
                     result.output,
                     model=cfg.judge_model,
                     votes=cfg.judge_votes,
-                    cmd_template=cfg.executor.judge_cmd,
-                    output_format=cfg.executor.output_format,
-                    api_spec=cfg.executor.api,
+                    executor=cfg.executor,
                 ): (case, result, metric)
                 for case, result, metric in judge_jobs
             }
