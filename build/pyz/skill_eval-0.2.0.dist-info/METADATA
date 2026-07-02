@@ -1,6 +1,0 @@
-Metadata-Version: 2.4
-Name: skill-eval
-Version: 0.2.0
-Summary: A/B evaluation pipeline for Claude Code skills: run test cases headlessly, score with deterministic metrics and blind LLM judges, aggregate an uplift report.
-Requires-Python: >=3.11
-Requires-Dist: pyyaml>=6.0
