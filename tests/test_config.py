@@ -8,7 +8,7 @@ ROOT = Path(__file__).parent.parent
 
 
 def test_taxonomy_loads_and_is_consistent() -> None:
-    taxonomy = load_taxonomy(ROOT / "taxonomy.yaml")
+    taxonomy = load_taxonomy(ROOT / "src" / "skill_eval" / "taxonomy.yaml")
     assert "summarization" in taxonomy.categories
     for cat in taxonomy.categories.values():
         for metric_name in cat.metrics:

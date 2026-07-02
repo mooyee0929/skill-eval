@@ -11,7 +11,7 @@ from skill_eval.config import (
     load_taxonomy,
 )
 
-TAXONOMY = load_taxonomy(Path(__file__).parent.parent / "taxonomy.yaml")
+TAXONOMY = load_taxonomy(Path(__file__).parent.parent / "src" / "skill_eval" / "taxonomy.yaml")
 
 
 def make_cfg(tmp_path: Path, category: str = "extraction") -> EvalConfig:
