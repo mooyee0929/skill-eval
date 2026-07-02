@@ -8,7 +8,8 @@ import json
 import re
 import subprocess
 
-from ..config import MetricDef
+from ..api_client import ApiError, complete
+from ..config import ApiSpec, MetricDef
 
 _SCORE_RE = re.compile(r'"score"\s*:\s*([1-5])')
 
@@ -40,7 +41,19 @@ def _ask_judge(
     timeout_s: int = 120,
     cmd_template: list[str] | None = None,
     output_format: str = "claude-json",
+    api_spec: ApiSpec | None = None,
 ) -> int:
+    if api_spec is not None:
+        try:
+            result, _ = complete(
+                api_spec, prompt=prompt, system=None, model=model, timeout_s=timeout_s
+            )
+        except ApiError as exc:
+            raise JudgeError(str(exc)) from exc
+        m = _SCORE_RE.search(result)
+        if m is None:
+            raise JudgeError(f"no score in judge reply: {result[:300]}")
+        return int(m.group(1))
     if cmd_template is not None:
         cmd = [
             part.replace("{model}", model).replace("{prompt}", prompt)
@@ -70,6 +83,7 @@ def judge_score(
     votes: int = 3,
     cmd_template: list[str] | None = None,
     output_format: str = "claude-json",
+    api_spec: ApiSpec | None = None,
 ) -> float:
     """Mean of `votes` independent 1-5 judgments, normalized to [0, 1]."""
     if metric.rubric is None:
@@ -85,7 +99,13 @@ def judge_score(
     for _ in range(votes):
         try:
             scores.append(
-                _ask_judge(prompt, model, cmd_template=cmd_template, output_format=output_format)
+                _ask_judge(
+                    prompt,
+                    model,
+                    cmd_template=cmd_template,
+                    output_format=output_format,
+                    api_spec=api_spec,
+                )
             )
         except (JudgeError, subprocess.TimeoutExpired, json.JSONDecodeError) as exc:
             errors.append(str(exc))

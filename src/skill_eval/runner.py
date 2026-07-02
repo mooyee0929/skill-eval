@@ -11,6 +11,7 @@ import time
 from dataclasses import asdict, dataclass
 from pathlib import Path
 
+from .api_client import ApiError, complete
 from .config import Arm, EvalConfig, TestCase
 
 
@@ -98,7 +99,44 @@ def _parse_output(stdout: str, output_format: str) -> tuple[str, dict[str, int] 
     return str(payload.get("result", "")), usage
 
 
+def _run_once_api(cfg: EvalConfig, case: TestCase, arm: Arm, run_index: int) -> RunResult:
+    skill_text = (
+        arm.skill_path.read_text(encoding="utf-8") if arm.skill_path is not None else None
+    )
+    start = time.monotonic()
+    try:
+        output, usage = complete(
+            cfg.executor.api,  # type: ignore[arg-type]
+            prompt=case.prompt,
+            system=skill_text,
+            model=cfg.model,
+            timeout_s=cfg.timeout_s,
+        )
+    except ApiError as exc:
+        return RunResult(
+            case_id=case.id,
+            arm=arm.key,
+            run_index=run_index,
+            ok=False,
+            output="",
+            latency_s=time.monotonic() - start,
+            error=str(exc),
+        )
+    return RunResult(
+        case_id=case.id,
+        arm=arm.key,
+        run_index=run_index,
+        ok=True,
+        output=output,
+        latency_s=time.monotonic() - start,
+        usage=usage,
+    )
+
+
 def run_once(cfg: EvalConfig, case: TestCase, arm: Arm, run_index: int) -> RunResult:
+    if cfg.executor.api is not None:
+        # API mode is single-shot text generation: no workspace, no check_cmd.
+        return _run_once_api(cfg, case, arm, run_index)
     workspace = Path(tempfile.mkdtemp(prefix=f"skill-eval-{case.id}-{arm.key}-"))
     try:
         if case.fixture_dir is not None:

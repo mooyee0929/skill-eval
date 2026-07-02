@@ -52,6 +52,19 @@ class Arm:
 
 
 @dataclass(frozen=True)
+class ApiSpec:
+    """Direct HTTP completion instead of a CLI. kind 'anthropic' hits the
+    Messages API; 'openai' hits any OpenAI-compatible chat endpoint
+    (internal gateways, Ollama, vLLM). Single-shot text generation only —
+    no tools or file access."""
+
+    kind: Literal["anthropic", "openai"] = "anthropic"
+    base_url: str = "https://api.anthropic.com"
+    api_key_env: str = "ANTHROPIC_API_KEY"
+    max_tokens: int = 4096
+
+
+@dataclass(frozen=True)
 class Executor:
     """How to invoke the model CLI. Defaults to the claude CLI; set command
     templates to run the evaluation on any other agent CLI.
@@ -64,6 +77,7 @@ class Executor:
     run_cmd: list[str] | None = None
     judge_cmd: list[str] | None = None
     output_format: Literal["claude-json", "text"] = "claude-json"
+    api: ApiSpec | None = None
 
 
 @dataclass(frozen=True)
@@ -173,11 +187,30 @@ def load_eval_config(path: Path) -> EvalConfig:
         raise ValueError("at least one test case is required")
 
     executor_raw = raw.get("executor", {})
+    api_raw = executor_raw.get("api")
+    api: ApiSpec | None = None
+    if api_raw is not None:
+        kind = api_raw.get("kind", "anthropic")
+        if kind not in ("anthropic", "openai"):
+            raise ValueError(f"executor.api.kind must be 'anthropic' or 'openai', got '{kind}'")
+        defaults = {
+            "anthropic": ("https://api.anthropic.com", "ANTHROPIC_API_KEY"),
+            "openai": ("https://api.openai.com", "OPENAI_API_KEY"),
+        }[kind]
+        api = ApiSpec(
+            kind=kind,
+            base_url=api_raw.get("base_url", defaults[0]),
+            api_key_env=api_raw.get("api_key_env", defaults[1]),
+            max_tokens=int(api_raw.get("max_tokens", 4096)),
+        )
     executor = Executor(
         run_cmd=executor_raw.get("run_cmd"),
         judge_cmd=executor_raw.get("judge_cmd"),
         output_format=executor_raw.get("output_format", "claude-json"),
+        api=api,
     )
+    if executor.api is not None and executor.run_cmd is not None:
+        raise ValueError("executor.api and executor.run_cmd are mutually exclusive")
     if executor.run_cmd is not None and not any("{prompt}" in p for p in executor.run_cmd):
         raise ValueError("executor.run_cmd must contain a {prompt} placeholder")
     if executor.judge_cmd is not None and not any("{prompt}" in p for p in executor.judge_cmd):

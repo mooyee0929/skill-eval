@@ -79,6 +79,25 @@ executor:
 `--append-system-prompt {skill}`); without a `{skill}` entry the skill is
 prepended to the prompt, which works on every CLI.
 
+## No agent CLI? Use the HTTP API executor
+
+If the machine has no agent CLI at all, point the executor at an HTTP
+endpoint instead — the Anthropic Messages API or any OpenAI-compatible
+gateway (Ollama, vLLM, internal proxies). stdlib-only, no extra deps:
+
+```yaml
+executor:
+  api:
+    kind: anthropic            # or: openai
+    api_key_env: ANTHROPIC_API_KEY
+    # base_url: http://gw.internal:8080   # for gateways / local models
+```
+
+API mode is single-shot text generation: skills inject as the system
+prompt, but there are no tools or file access, so `check_cmd` cases are
+skipped. You can also run `run` on a machine that has a CLI, copy
+`results/` over, and do `score`/`report` elsewhere.
+
 ## No uv/pip? Use the zipapp
 
 Each release ships `skill-eval.pyz`, a self-contained zipapp with all
