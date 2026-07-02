@@ -92,6 +92,7 @@ class TestCase:
     id: str
     prompt: str
     lens: str = "happy-path"
+    capability_point: str | None = None  # one-line "what this tests" for dedupe
     expected: Expected | None = None
     fixture_dir: Path | None = None  # copied into an isolated workspace per run
     check_cmd: str | None = None  # for update_success_rate: exit 0 = success
@@ -178,6 +179,7 @@ def load_eval_config(path: Path) -> EvalConfig:
                 id=c["id"],
                 prompt=c["prompt"],
                 lens=c.get("lens", "happy-path"),
+                capability_point=c.get("capability_point"),
                 expected=_load_expected(c.get("expected")),
                 fixture_dir=(base / fixture).resolve() if fixture else None,
                 check_cmd=c.get("check_cmd"),

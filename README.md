@@ -79,6 +79,23 @@ executor:
 `--append-system-prompt {skill}`); without a `{skill}` entry the skill is
 prepended to the prompt, which works on every CLI.
 
+## Using it from GitHub Copilot Chat (VS Code)
+
+The interactive front-end doesn't have to be Claude Code. This repo ships
+`.github/prompts/skill-eval.prompt.md` — open the repo in VS Code, type
+`/skill-eval` in Copilot Chat (agent mode), and Copilot walks the same
+protocol: intake → category confirmation → case approval → CLI execution.
+Copy the file into any project's `.github/prompts/` to use it there.
+
+Test-case generation stays independent regardless of front-end, because it
+lives in the engine:
+
+```bash
+skill-eval gen-cases -c eval.yaml --per-lens 2     # parallel independent generators
+# review candidates.yaml, then merge only the approved ids:
+skill-eval add-case  -c eval.yaml --from candidates.yaml --ids happy-one,edge-two
+```
+
 ## No agent CLI? Use the HTTP API executor
 
 If the machine has no agent CLI at all, point the executor at an HTTP

@@ -2,6 +2,8 @@
 
     skill-eval categories                 list taxonomy categories and their metrics
     skill-eval validate  -c eval.yaml     check config + taxonomy consistency
+    skill-eval gen-cases -c eval.yaml     parallel independent generators -> candidates.yaml
+    skill-eval add-case  -c eval.yaml --from candidates.yaml --ids a,b   merge approved cases
     skill-eval run       -c eval.yaml     execute all (case, arm, run) combinations
     skill-eval score     -c eval.yaml     score saved runs -> results/scores.json
     skill-eval report    -c eval.yaml     aggregate -> results/report.md (printed too)
@@ -67,6 +69,38 @@ def cmd_validate(args: argparse.Namespace) -> int:
     return 0
 
 
+def cmd_gen_cases(args: argparse.Namespace) -> int:
+    from .gencases import LENSES, generate_candidates, write_candidates
+
+    cfg, _ = _load(args)
+    lenses = args.lenses.split(",") if args.lenses else sorted(LENSES)
+    out = Path(args.out) if args.out else Path(args.config).parent / "candidates.yaml"
+    print(f"generating {args.per_lens} case(s) × {len(lenses)} independent lens generators...")
+    candidates, warnings = generate_candidates(cfg, lenses=lenses, per_lens=args.per_lens)
+    for warning in warnings:
+        print(f"  note: {warning}")
+    write_candidates(out, candidates)
+    print(f"done: {len(candidates)} candidates -> {out}")
+    print("review them, then merge approved ones with: skill-eval add-case "
+          f"-c {args.config} --from {out} --ids <id1,id2,...>")
+    return 0
+
+
+def cmd_add_case(args: argparse.Namespace) -> int:
+    from .gencases import merge_cases
+
+    if not args.all and not args.ids:
+        print("provide --ids id1,id2,... or --all", file=sys.stderr)
+        return 1
+    ids = None if args.all else args.ids.split(",")
+    added, skipped = merge_cases(Path(args.config), Path(args.from_path), ids)
+    for message in skipped:
+        print(f"  note: {message}")
+    print(f"added {added} case(s) to {args.config}")
+    _load(args)  # re-validate the merged config
+    return 0
+
+
 def cmd_run(args: argparse.Namespace) -> int:
     cfg, _ = _load(args)
     results = run_all(cfg, resume=not args.no_resume)
@@ -113,18 +147,28 @@ def main(argv: list[str] | None = None) -> int:
     sub = parser.add_subparsers(dest="command", required=True)
 
     sub.add_parser("categories", help="list categories and metrics")
-    for name in ("validate", "run", "score", "report"):
+    for name in ("validate", "gen-cases", "add-case", "run", "score", "report"):
         p = sub.add_parser(name)
         p.add_argument("-c", "--config", required=True, help="path to eval.yaml")
         if name == "run":
             p.add_argument(
                 "--no-resume", action="store_true", help="re-run combinations that already have results"
             )
+        elif name == "gen-cases":
+            p.add_argument("--lenses", default=None, help="comma-separated lens list (default: all)")
+            p.add_argument("--per-lens", type=int, default=2, help="cases per lens (default 2)")
+            p.add_argument("--out", default=None, help="candidates file (default: candidates.yaml next to config)")
+        elif name == "add-case":
+            p.add_argument("--from", dest="from_path", required=True, help="candidates yaml file")
+            p.add_argument("--ids", default=None, help="comma-separated candidate ids to merge")
+            p.add_argument("--all", action="store_true", help="merge every candidate")
 
     args = parser.parse_args(argv)
     handlers = {
         "categories": cmd_categories,
         "validate": cmd_validate,
+        "gen-cases": cmd_gen_cases,
+        "add-case": cmd_add_case,
         "run": cmd_run,
         "score": cmd_score,
         "report": cmd_report,

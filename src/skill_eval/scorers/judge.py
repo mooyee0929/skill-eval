@@ -4,12 +4,10 @@ prompt, the rubric, and one anonymous response — never which arm produced it
 
 from __future__ import annotations
 
-import json
 import re
-import subprocess
 
-from ..api_client import ApiError, complete
-from ..config import ApiSpec, MetricDef
+from ..completion import CompletionError, complete_text
+from ..config import Executor, MetricDef
 
 _SCORE_RE = re.compile(r'"score"\s*:\s*([1-5])')
 
@@ -38,36 +36,13 @@ class JudgeError(RuntimeError):
 def _ask_judge(
     prompt: str,
     model: str,
+    executor: Executor,
     timeout_s: int = 120,
-    cmd_template: list[str] | None = None,
-    output_format: str = "claude-json",
-    api_spec: ApiSpec | None = None,
 ) -> int:
-    if api_spec is not None:
-        try:
-            result, _ = complete(
-                api_spec, prompt=prompt, system=None, model=model, timeout_s=timeout_s
-            )
-        except ApiError as exc:
-            raise JudgeError(str(exc)) from exc
-        m = _SCORE_RE.search(result)
-        if m is None:
-            raise JudgeError(f"no score in judge reply: {result[:300]}")
-        return int(m.group(1))
-    if cmd_template is not None:
-        cmd = [
-            part.replace("{model}", model).replace("{prompt}", prompt)
-            for part in cmd_template
-        ]
-    else:
-        cmd = ["claude", "-p", prompt, "--output-format", "json", "--model", model, "--max-turns", "1"]
-    proc = subprocess.run(cmd, capture_output=True, text=True, timeout=timeout_s)
-    if proc.returncode != 0:
-        raise JudgeError(f"judge exited {proc.returncode}: {proc.stderr.strip()[:500]}")
-    if cmd_template is not None and output_format == "text":
-        result = proc.stdout
-    else:
-        result = str(json.loads(proc.stdout).get("result", ""))
+    try:
+        result = complete_text(executor, prompt, model=model, timeout_s=timeout_s)
+    except CompletionError as exc:
+        raise JudgeError(str(exc)) from exc
     m = _SCORE_RE.search(result)
     if m is None:
         raise JudgeError(f"no score in judge reply: {result[:300]}")
@@ -81,9 +56,7 @@ def judge_score(
     *,
     model: str,
     votes: int = 3,
-    cmd_template: list[str] | None = None,
-    output_format: str = "claude-json",
-    api_spec: ApiSpec | None = None,
+    executor: Executor | None = None,
 ) -> float:
     """Mean of `votes` independent 1-5 judgments, normalized to [0, 1]."""
     if metric.rubric is None:
@@ -94,20 +67,14 @@ def judge_score(
         rubric=metric.rubric,
         response=response[:20000],
     )
+    if executor is None:
+        executor = Executor()
     scores: list[int] = []
     errors: list[str] = []
     for _ in range(votes):
         try:
-            scores.append(
-                _ask_judge(
-                    prompt,
-                    model,
-                    cmd_template=cmd_template,
-                    output_format=output_format,
-                    api_spec=api_spec,
-                )
-            )
-        except (JudgeError, subprocess.TimeoutExpired, json.JSONDecodeError) as exc:
+            scores.append(_ask_judge(prompt, model, executor))
+        except JudgeError as exc:
             errors.append(str(exc))
     if not scores:
         raise JudgeError(f"all {votes} judge votes failed: {errors}")
