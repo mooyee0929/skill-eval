@@ -149,7 +149,7 @@ def edge_f1(output: str, expected: Expected) -> float:
     return 2 * precision * recall / (precision + recall)
 
 
-def render_success_rate(output: str, expected: Expected) -> float:
+def render_success_rate(output: str, expected: Expected | None = None) -> float:
     """1.0 if the response contains a mermaid block whose nodes are all
     connected by at least one parseable edge (a cheap syntactic render proxy)."""
     blocks = _MERMAID_BLOCK.findall(output)
@@ -194,6 +194,8 @@ SCORERS = {
 
 
 def score(metric_name: str, output: str, expected: Expected | None, *, check_cmd_ok: bool | None = None) -> float | None:
+    if metric_name == "render_success_rate":
+        return render_success_rate(output)
     if metric_name == "update_success_rate":
         if expected is None and check_cmd_ok is None:
             return None

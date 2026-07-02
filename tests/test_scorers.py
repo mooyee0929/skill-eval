@@ -83,3 +83,9 @@ def test_score_dispatch() -> None:
     assert d.score("exact_match", "hello", exp) == 1.0
     assert d.score("nonexistent_metric", "x", exp) is None
     assert d.score("field_f1", "x", None) is None
+
+
+def test_render_success_applies_without_expected() -> None:
+    assert d.score("render_success_rate", "```mermaid\ngraph TD\n A --> B\n```", None) == 1.0
+    edges_exp = Expected(type="edges", value=["A -> B"])
+    assert d.score("render_success_rate", "no diagram", edges_exp) == 0.0

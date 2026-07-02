@@ -39,7 +39,7 @@ metrics:
   render_success_rate:
     kind: deterministic
     direction: higher
-    expected_type: diagram
+    # no expected_type: computed from the output alone, applies to every case
   broken_link_rate:
     kind: deterministic
     direction: lower
