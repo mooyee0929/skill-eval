@@ -27,7 +27,50 @@ class RunResult:
     usage: dict[str, int] | None = None
 
 
+def render_cmd_template(
+    template: list[str],
+    *,
+    prompt: str,
+    model: str,
+    max_turns: int,
+    skill_text: str | None,
+) -> list[str]:
+    """Render an executor command template. Entries containing {skill} (and an
+    immediately preceding flag entry) are dropped when the arm has no skill.
+    If no entry carries {skill} but the arm has one, the skill content is
+    prepended to the prompt — the generic fallback for CLIs without a
+    system-prompt flag."""
+    has_skill_slot = any("{skill}" in part for part in template)
+    effective_prompt = prompt
+    if skill_text is not None and not has_skill_slot:
+        effective_prompt = f"{skill_text}\n\n---\n\n{prompt}"
+
+    cmd: list[str] = []
+    for part in template:
+        if "{skill}" in part:
+            if skill_text is None:
+                if cmd and cmd[-1].startswith("-"):
+                    cmd.pop()
+                continue
+            part = part.replace("{skill}", skill_text)
+        part = part.replace("{model}", model).replace("{max_turns}", str(max_turns))
+        part = part.replace("{prompt}", effective_prompt)
+        cmd.append(part)
+    return cmd
+
+
 def _build_cmd(cfg: EvalConfig, arm: Arm, prompt: str) -> list[str]:
+    skill_text = (
+        arm.skill_path.read_text(encoding="utf-8") if arm.skill_path is not None else None
+    )
+    if cfg.executor.run_cmd is not None:
+        return render_cmd_template(
+            cfg.executor.run_cmd,
+            prompt=prompt,
+            model=cfg.model,
+            max_turns=cfg.max_turns,
+            skill_text=skill_text,
+        )
     cmd = [
         "claude",
         "-p",
@@ -39,14 +82,16 @@ def _build_cmd(cfg: EvalConfig, arm: Arm, prompt: str) -> list[str]:
         "--max-turns",
         str(cfg.max_turns),
     ]
-    if arm.skill_path is not None:
-        cmd += ["--append-system-prompt", arm.skill_path.read_text(encoding="utf-8")]
+    if skill_text is not None:
+        cmd += ["--append-system-prompt", skill_text]
     if cfg.permission_mode:
         cmd += ["--permission-mode", cfg.permission_mode]
     return cmd
 
 
-def _parse_output(stdout: str) -> tuple[str, dict[str, int] | None]:
+def _parse_output(stdout: str, output_format: str) -> tuple[str, dict[str, int] | None]:
+    if output_format == "text":
+        return stdout.strip(), None
     payload = json.loads(stdout)
     usage_raw = payload.get("usage") or {}
     usage = {k: v for k, v in usage_raw.items() if isinstance(v, int)} or None
@@ -91,7 +136,7 @@ def run_once(cfg: EvalConfig, case: TestCase, arm: Arm, run_index: int) -> RunRe
             )
 
         try:
-            output, usage = _parse_output(proc.stdout)
+            output, usage = _parse_output(proc.stdout, cfg.executor.output_format)
         except (json.JSONDecodeError, TypeError) as exc:
             return RunResult(
                 case_id=case.id,

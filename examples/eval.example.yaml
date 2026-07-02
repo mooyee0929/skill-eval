@@ -54,3 +54,15 @@ cases:
   #   prompt: "Update README.md so the install section matches pyproject.toml"
   #   fixture_dir: fixtures/update-readme
   #   check_cmd: "grep -q 'pip install mypkg==2.0' README.md"
+
+# --- Optional: run on a different agent CLI (default is the claude CLI) ---
+# Placeholders: {prompt} (required), {model}, {max_turns}, {skill}.
+# Entries containing {skill} — plus the flag entry right before them — are
+# dropped for arms without a skill. If no entry contains {skill}, the skill
+# content is prepended to the prompt (fallback for CLIs without a
+# system-prompt flag).
+#
+# executor:
+#   run_cmd: ["gemini", "-m", "{model}", "-p", "{prompt}"]
+#   judge_cmd: ["gemini", "-m", "{model}", "-p", "{prompt}"]
+#   output_format: text        # text | claude-json

@@ -52,6 +52,21 @@ class Arm:
 
 
 @dataclass(frozen=True)
+class Executor:
+    """How to invoke the model CLI. Defaults to the claude CLI; set command
+    templates to run the evaluation on any other agent CLI.
+
+    Template placeholders: {prompt}, {model}, {max_turns}, {skill}.
+    Entries containing {skill} (plus an immediately preceding flag entry)
+    are dropped for arms without a skill. If no entry contains {skill},
+    the skill content is prepended to the prompt instead."""
+
+    run_cmd: list[str] | None = None
+    judge_cmd: list[str] | None = None
+    output_format: Literal["claude-json", "text"] = "claude-json"
+
+
+@dataclass(frozen=True)
 class Expected:
     type: ExpectedType
     value: Any
@@ -84,6 +99,7 @@ class EvalConfig:
     permission_mode: str | None = None
     timeout_s: int = 600
     results_dir: Path = field(default_factory=lambda: Path("results"))
+    executor: Executor = field(default_factory=Executor)
 
 
 def load_taxonomy(path: Path) -> Taxonomy:
@@ -152,6 +168,17 @@ def load_eval_config(path: Path) -> EvalConfig:
     if not cases:
         raise ValueError("at least one test case is required")
 
+    executor_raw = raw.get("executor", {})
+    executor = Executor(
+        run_cmd=executor_raw.get("run_cmd"),
+        judge_cmd=executor_raw.get("judge_cmd"),
+        output_format=executor_raw.get("output_format", "claude-json"),
+    )
+    if executor.run_cmd is not None and not any("{prompt}" in p for p in executor.run_cmd):
+        raise ValueError("executor.run_cmd must contain a {prompt} placeholder")
+    if executor.judge_cmd is not None and not any("{prompt}" in p for p in executor.judge_cmd):
+        raise ValueError("executor.judge_cmd must contain a {prompt} placeholder")
+
     return EvalConfig(
         mode=mode,
         purpose=raw["purpose"],
@@ -167,4 +194,5 @@ def load_eval_config(path: Path) -> EvalConfig:
         permission_mode=raw.get("permission_mode"),
         timeout_s=int(raw.get("timeout_s", 600)),
         results_dir=(base / raw.get("results_dir", "results")).resolve(),
+        executor=executor,
     )

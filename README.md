@@ -62,6 +62,33 @@ Config schema: see `examples/eval.example.yaml`. Category → metric mapping:
   per run, so runs cannot contaminate each other.
 - Judges are blind to arm identity and vote independently.
 
+## Running on other agent CLIs
+
+By default runs and judges execute through the `claude` CLI. Set an
+`executor` block in eval.yaml to use any CLI that accepts a prompt and
+prints a response:
+
+```yaml
+executor:
+  run_cmd: ["gemini", "-m", "{model}", "-p", "{prompt}"]
+  judge_cmd: ["gemini", "-m", "{model}", "-p", "{prompt}"]
+  output_format: text
+```
+
+`{skill}` marks where the skill content goes (e.g. claude's
+`--append-system-prompt {skill}`); without a `{skill}` entry the skill is
+prepended to the prompt, which works on every CLI.
+
+## No uv/pip? Use the zipapp
+
+Each release ships `skill-eval.pyz`, a self-contained zipapp with all
+dependencies bundled. It needs only Python 3.11+:
+
+```bash
+python3 skill-eval.pyz categories
+python3 skill-eval.pyz run -c eval.yaml
+```
+
 ## Tests
 
 ```bash
