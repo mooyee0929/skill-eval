@@ -1,8 +1,8 @@
 [project]
 name = "skill-eval"
-version = "0.2.0"
+version = "0.3.0"
 description = "A/B evaluation pipeline for Claude Code skills: run test cases headlessly, score with deterministic metrics and blind LLM judges, aggregate an uplift report."
-requires-python = ">=3.11"
+requires-python = ">=3.8"
 dependencies = [
     "pyyaml>=6.0",
 ]
@@ -12,7 +12,7 @@ skill-eval = "skill_eval.cli:main"
 
 [dependency-groups]
 dev = [
-    "pytest>=8.0",
+    "pytest>=8.0,<8.4",
 ]
 
 [build-system]

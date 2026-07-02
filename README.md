@@ -82,7 +82,7 @@ prepended to the prompt, which works on every CLI.
 ## No uv/pip? Use the zipapp
 
 Each release ships `skill-eval.pyz`, a self-contained zipapp with all
-dependencies bundled. It needs only Python 3.11+:
+dependencies bundled. It needs only Python 3.8+:
 
 ```bash
 python3 skill-eval.pyz categories
