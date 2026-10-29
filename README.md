@@ -45,6 +45,15 @@ alias skill-eval="python3 $PWD/skill-eval.pyz"
 Runs and judges need a model backend: the `claude` CLI on PATH (default),
 any other agent CLI, or a raw HTTP API — see the executor sections below.
 
+To use the `/skill-eval` front-end in Claude Code, copy the skill into place.
+It calls the engine with `uv run --project ~/dev/skill-eval`, so either clone
+this repo to `~/dev/skill-eval` or edit that path in the copied `SKILL.md`:
+
+```bash
+mkdir -p ~/.claude/skills/skill-eval
+cp skill/SKILL.md ~/.claude/skills/skill-eval/
+```
+
 ### Step 1 — Pick the category
 
 ```bash
@@ -122,7 +131,8 @@ skill-eval run -c eval.yaml
 Every (case × arm × run) executes in a fresh headless session in an
 isolated temp workspace: `cases × 2 arms × runs_per_case` sessions total,
 so expect minutes, not seconds. Interrupted? Just re-run — completed
-combinations are cached in `results/` and skipped.
+combinations are cached in `results/` and skipped (`--no-resume` forces a
+full re-run).
 
 ### Step 6 — Score
 
@@ -235,6 +245,25 @@ dependencies bundled. It needs only Python 3.8+:
 ```bash
 python3 skill-eval.pyz categories
 python3 skill-eval.pyz run -c eval.yaml
+```
+
+## Project layout
+
+```
+src/skill_eval/
+  cli.py            subcommands: categories, validate, gen-cases, add-case, run, score, report
+  config.py         eval.yaml loader and validation (arms, cases, executor)
+  gencases.py       parallel per-lens test-case generators, dedup, merge
+  runner.py         isolated headless runs per (case, arm, run), resume cache
+  completion.py     single-shot text completion over CLI or HTTP backend
+  api_client.py     stdlib Anthropic / OpenAI-compatible HTTP client
+  scorers/          deterministic.py (code metrics), judge.py (blind LLM votes)
+  aggregate.py      scoring pass, normalization, weighted composite, uplift, report
+  taxonomy.yaml     categories → metrics and weights
+skill/SKILL.md                       Claude Code front-end
+.github/prompts/skill-eval.prompt.md Copilot Chat front-end
+examples/eval.example.yaml           full config schema
+tests/                               pytest suite
 ```
 
 ## Tests
